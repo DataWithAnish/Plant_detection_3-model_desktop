@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# =========================
-# Config (override via env)
-# =========================
 ENV_NAME="${ENV_NAME:-COSC591-Plant}"
 APP_PY="${APP_PY:-COSC591-plant-classifier.py}"
 REQUIREMENTS_FILE="${REQUIREMENTS_FILE:-requirements.lock.txt}"
@@ -14,9 +11,6 @@ echo "==> Bootstrap for ${ENV_NAME}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# ===================================
-# Ensure Conda exists (auto-install)
-# ===================================
 have_conda() { command -v conda >/dev/null 2>&1; }
 
 if ! have_conda; then
@@ -44,10 +38,9 @@ if ! have_conda; then
 
   bash "$INST" -b -p "$HOME/miniconda3"
   rm -f "$INST"
-  # shellcheck source=/dev/null
+
   . "$HOME/miniconda3/etc/profile.d/conda.sh"
 else
-  # Load conda into this shell if not already
   if ! have_conda; then
     [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ] && . "$HOME/miniconda3/etc/profile.d/conda.sh"
     [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ] && . "$HOME/anaconda3/etc/profile.d/conda.sh"
@@ -57,9 +50,7 @@ fi
 command -v conda >/dev/null 2>&1 || { echo "ERROR: conda still not available"; exit 1; }
 eval "$(conda shell.bash hook)"
 
-# ==========================
-# Create env if missing
-# ==========================
+
 if conda env list | awk '{print $1}' | grep -qx "${ENV_NAME}"; then
   echo "==> Conda env '${ENV_NAME}' already exists."
 else
@@ -67,19 +58,15 @@ else
   conda create -y -n "${ENV_NAME}" "python=${PY_VER}"
 fi
 
-# ==========================
-# Activate & install pip deps
-# ==========================
+
 conda activate "${ENV_NAME}"
 python -m pip install --upgrade pip
 
-# Optional: allow skipping torch-related packages even if present in requirements
-# Usage: SKIP_TORCH=1 ./setup_and_run.sh
+
 if [[ -f "${REQUIREMENTS_FILE}" ]]; then
   if [[ "${SKIP_TORCH:-0}" == "1" ]]; then
     echo "==> Installing from ${REQUIREMENTS_FILE} (torch-related packages filtered out) ..."
     TMP_REQ="$(mktemp)"
-    # Filter typical torch/cuda wheels; adjust regex if needed
     grep -viE '^(torch|torchvision|torchaudio|triton|pytorch(-cuda)?|nvidia-)' "${REQUIREMENTS_FILE}" > "${TMP_REQ}" || true
     python -m pip install -r "${TMP_REQ}"
     rm -f "${TMP_REQ}"
@@ -94,12 +81,10 @@ else
     "pillow>=10.3,<12" \
     "matplotlib>=3.8,<3.11" \
     "opencv-python>=4.9,<5"
-  # Note: intentionally NOT installing ultralytics/tensorflow here; add as needed.
+
 fi
 
-# ==========================
-# Ensure model is joined
-# ==========================
+
 if [[ ! -f "${MODEL_PATH}" ]]; then
   if compgen -G "${MODEL_PATH}.part."* >/dev/null; then
     echo "==> Reassembling model from split parts: ${MODEL_PATH}.part.*"
@@ -112,9 +97,7 @@ if [[ ! -f "${MODEL_PATH}" ]]; then
   fi
 fi
 
-# ==========================
-# Launch the app
-# ==========================
+
 if [[ ! -f "${APP_PY}" ]]; then
   echo "ERROR: ${APP_PY} not found in $(pwd)."
   echo "Set APP_PY=/path/to/app.py when invoking, e.g.:"
