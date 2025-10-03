@@ -8,6 +8,7 @@ ENV_NAME="${ENV_NAME:-COSC591-Plant}"
 APP_PY="${APP_PY:-COSC591-plant-classifier.py}"
 REQUIREMENTS_FILE="${REQUIREMENTS_FILE:-requirements.lock.txt}"
 PY_VER="${PY_VER:-3.10}"
+MODEL_PATH="${MODEL_PATH:-models/resnet50/resnet50_stage2_conv5.h5}"
 
 echo "==> Bootstrap for ${ENV_NAME}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -94,6 +95,21 @@ else
     "matplotlib>=3.8,<3.11" \
     "opencv-python>=4.9,<5"
   # Note: intentionally NOT installing ultralytics/tensorflow here; add as needed.
+fi
+
+# ==========================
+# Ensure model is joined
+# ==========================
+if [[ ! -f "${MODEL_PATH}" ]]; then
+  if compgen -G "${MODEL_PATH}.part."* >/dev/null; then
+    echo "==> Reassembling model from split parts: ${MODEL_PATH}.part.*"
+    cat "${MODEL_PATH}.part."* > "${MODEL_PATH}.tmp"
+    mv -f "${MODEL_PATH}.tmp" "${MODEL_PATH}"
+    echo "==> Model reassembled at ${MODEL_PATH}"
+  else
+    echo "ERROR: ${MODEL_PATH} not found and no parts ${MODEL_PATH}.part.* present."
+    exit 1
+  fi
 fi
 
 # ==========================
