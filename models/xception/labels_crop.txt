@@ -1,0 +1,15 @@
+Apple
+Blueberry
+Cherry
+Grape
+Maize
+Orange
+Peach
+Pepper_bell
+Potato
+Raspberry
+Soybean
+Squash
+Strawberry
+Tomato
+Unknown
