@@ -1,14 +1,4 @@
-# plant_classification_app_3model.py
-# YOLO (PyTorch) + Xception (TFLite two-head) + ResNet50 (Keras .h5)
-# UI: Tkinter panels + Target Crop/State dropdowns
-# Charts (between panels & log):
-#   1) Inference time — last N calls (mean ± std)
-#   2) Top-1 confidence — last N calls (mean ± std)
-#   3) Load time (STACKED): Package cold total + Model init
-#
-# This version fixes the Xception TFLite import to work across TF builds:
-#   - prefers tf.lite.Interpreter (full TensorFlow)
-#   - falls back to tflite_runtime.interpreter.Interpreter when needed
+
 
 import os
 import sys
@@ -28,23 +18,11 @@ from tkinter import ttk
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-# ----------------------------
-# Tunables
-# ----------------------------
+
 METRIC_WINDOW = 10  # rolling window size for charts
 
-# ----------------------------
-# Model Paths (EDIT IF NEEDED)
-# ----------------------------
 
-# ----------------------------
-# Model base dir (relative to this file)
-# ----------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# ----------------------------
-# Model Paths (relative to this file)
-# ----------------------------
 
 # YOLO (Ultralytics, PyTorch)
 YOLO_MODEL_PATH = os.path.join(BASE_DIR, "models", "yolo", "best.pt")
@@ -59,15 +37,11 @@ XCEPTION_LABELS_STATE = os.path.join(XCEPTION_VIC_DIR, "labels_state.txt")
 RESNET50_KERAS_MODEL = os.path.join(BASE_DIR, "models", "resnet50", "resnet50_stage2_conv5.h5")
 RESNET50_CLASS_CSV   = os.path.join(os.path.dirname(RESNET50_KERAS_MODEL), "class_index.csv")
 
-# Fallback class map (old JSON format) if CSV not available
 RESNET_DIR          = os.path.dirname(RESNET50_KERAS_MODEL)
 RESNET_CLASSES_JSON = os.path.join(RESNET_DIR, "class_names.json")
 
 
-# ----------------------------
-# Import timing registry
-# ----------------------------
-_IMPORT_REGISTRY = {}  # alias -> {'cold_time': float, 'imported_by': str}
+_IMPORT_REGISTRY = {}  
 _REGISTRY_LOCK = threading.Lock()
 
 def _timed_import(module_spec: str, alias: str, imported_by: str) -> float:
@@ -88,9 +62,7 @@ def _cold_cost(alias: str) -> float:
         rec = _IMPORT_REGISTRY.get(alias)
         return float(rec['cold_time']) if rec else 0.0
 
-# ----------------------------
-# Helpers (label parsing & formatting)
-# ----------------------------
+
 def _clean_spaces(s: str) -> str:
     return " ".join(s.replace("_", " ").split()).strip()
 
@@ -139,9 +111,7 @@ def pick_torch_device_preference():
         pass
     return 'cpu'
 
-# ----------------------------
-# Model Wrappers
-# ----------------------------
+
 class YoloClassifier:
     def __init__(self, model_path: str):
         self.pkg_time_this_call = 0.0
@@ -178,8 +148,6 @@ class YoloClassifier:
         top1_conf = float(probs.top1conf)
         top1_name = names.get(top1_idx, str(top1_idx))
         top_crop, top_state = split_combined_label(top1_name)
-
-        # Target confidences (sum across all classes with same crop/state)
         target_crop_conf = None
         target_state_conf = None
         try:
@@ -227,28 +195,26 @@ class XceptionClassifier:
             raise FileNotFoundError("Xception labels not found. Expected:\n  {}\n  {}".format(labels_crop_path, labels_state_path))
         self.crop_labels  = self._load_labels(labels_crop_path)
         self.state_labels = self._load_labels(labels_state_path)
-        self.class_names = list(self.crop_labels)  # for dropdowns
+        self.class_names = list(self.crop_labels) 
 
-        # ---- package imports (prefer full TF; fallback to tflite-runtime) ----
         self.pkg_time_this_call = 0.0
         Interpreter = None
         used_tf = False
 
-        # Try full TensorFlow: use tf.lite.Interpreter (works across many builds)
+
         try:
             self.pkg_time_this_call += _timed_import('tensorflow', 'tensorflow', 'Xception')
-            import tensorflow as tf  # noqa
-            Interpreter = tf.lite.Interpreter  # type: ignore[attr-defined]
+            import tensorflow as tf  
+            Interpreter = tf.lite.Interpreter
             used_tf = True
         except Exception:
             Interpreter = None
             used_tf = False
 
-        # Fallback: tflite-runtime
         if Interpreter is None:
             try:
                 self.pkg_time_this_call += _timed_import('tflite_runtime.interpreter', 'tflite_runtime', 'Xception')
-                from tflite_runtime.interpreter import Interpreter  # type: ignore
+                from tflite_runtime.interpreter import Interpreter  
                 used_tf = False
             except Exception as e:
                 raise SystemExit(
@@ -262,7 +228,6 @@ class XceptionClassifier:
         self.pkg_cold_total = (_cold_cost('tensorflow') if used_tf else _cold_cost('tflite_runtime'))
         self.device_descr = "TensorFlow Lite (TF runtime)" if used_tf else "TensorFlow Lite (tflite-runtime)"
 
-        # ---- load interpreter safely (copy to temp to avoid path quirks) ----
         import shutil, tempfile
         if not os.path.isfile(tflite_path) or os.stat(tflite_path).st_size < 1024:
             raise ValueError(f"Xception TFLite file is missing or too small: {tflite_path}")
@@ -319,7 +284,7 @@ class XceptionClassifier:
         img = Image.open(image_path).convert("RGB").resize((self.W, self.H), Image.LANCZOS)
         arr = np.array(img)
         if self.is_float_input:
-            x = arr.astype(np.float32)[None, ...]  # raw 0..255 float (matches your Dart raw255)
+            x = arr.astype(np.float32)[None, ...]  
         else:
             if self.input_dtype == np.uint8:
                 x = arr.astype(np.uint8)[None, ...]
@@ -393,7 +358,7 @@ class XceptionClassifier:
             'model_init_time': self.model_init_time,
         }
 
-    # --- helpers ---
+
     def _load_labels(self, path: str):
         with open(path, "r", encoding="utf-8") as f:
             return [ln.strip() for ln in f if ln.strip()]
@@ -455,8 +420,6 @@ class ResNetClassifier:
         from tensorflow.keras.models import load_model
         from tensorflow.keras.applications.resnet50 import preprocess_input  # noqa
         self.preprocess_input = preprocess_input
-
-        # Load class map: CSV (idx,label) no header → fallback JSON
         labels = None
         if os.path.isfile(class_csv_path):
             import csv
@@ -551,9 +514,7 @@ class ResNetClassifier:
             'model_init_time': self.model_init_time,
         }
 
-# ----------------------------
-# UI App
-# ----------------------------
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -646,7 +607,6 @@ class App(tk.Tk):
         self.panel_frames[model_name] = frame
         frame._info = info; frame._img = img_holder; frame._caption = caption
 
-    # ----- Metrics area (3 charts) -----
     def _build_metrics_area(self):
         self.metrics_frame = tk.Frame(self, bg='white', highlightbackground='black', highlightthickness=1)
         self.metrics_frame.pack(fill='x', padx=12, pady=(0, 8))
@@ -654,16 +614,12 @@ class App(tk.Tk):
         self.metrics_frame.grid_columnconfigure(0, weight=1, uniform='m')
         self.metrics_frame.grid_columnconfigure(1, weight=1, uniform='m')
         self.metrics_frame.grid_columnconfigure(2, weight=1, uniform='m')
-
-        # 1) Inference time — mean ± std (rolling)
         self.fig_time = Figure(figsize=(4.0, 2.2), dpi=100)
         self.ax_time = self.fig_time.add_subplot(111)
         self.ax_time.set_title(f"Inference time — last {METRIC_WINDOW} calls (mean ± std)")
         self.ax_time.set_ylabel("Seconds")
         self.canvas_time = FigureCanvasTkAgg(self.fig_time, master=self.metrics_frame)
         self.canvas_time.get_tk_widget().grid(row=0, column=0, sticky='nsew', padx=6, pady=6)
-
-        # 2) Confidence — mean ± std (rolling)
         self.fig_conf = Figure(figsize=(4.0, 2.2), dpi=100)
         self.ax_conf = self.fig_conf.add_subplot(111)
         self.ax_conf.set_title(f"Top-1 confidence — last {METRIC_WINDOW} calls (mean ± std)")
@@ -671,8 +627,6 @@ class App(tk.Tk):
         self.ax_conf.set_ylim(0.0, 1.0)
         self.canvas_conf = FigureCanvasTkAgg(self.fig_conf, master=self.metrics_frame)
         self.canvas_conf.get_tk_widget().grid(row=0, column=1, sticky='nsew', padx=6, pady=6)
-
-        # 3) Load time (stacked)
         self.fig_load = Figure(figsize=(4.0, 2.2), dpi=100)
         self.ax_load = self.fig_load.add_subplot(111)
         self.ax_load.set_title("Model load time (sec): package cold total + model init")
@@ -701,7 +655,6 @@ class App(tk.Tk):
         return float(np.mean(w)), float(np.std(w))
 
     def _refresh_plots(self):
-        # Inference time (mean ± std)
         means_t, stds_t = [], []
         for m in self.models:
             mean, std = self._rolling_stats(self.hist[m]['infer'])
@@ -710,7 +663,11 @@ class App(tk.Tk):
                              list(self.models), means_t, stds_t, ylim=None, fmt="{:.3f}")
         self.canvas_time.draw_idle()
 
-        # Confidence (mean ± std)
+
+
+
+
+        
         means_c, stds_c = [], []
         for m in self.models:
             mean, std = self._rolling_stats(self.hist[m]['conf'])
@@ -718,8 +675,6 @@ class App(tk.Tk):
         self._bar_with_error(self.ax_conf, f"Top-1 confidence — last {METRIC_WINDOW} calls (mean ± std)",
                              list(self.models), means_c, stds_c, ylim=(0.0, 1.0), fmt="{:.2f}")
         self.canvas_conf.draw_idle()
-
-        # Load times (stacked)
         self.ax_load.clear()
         self.ax_load.set_title("Model load time (sec): package cold total + model init")
         self.ax_load.set_ylabel("Seconds")
@@ -781,9 +736,8 @@ class App(tk.Tk):
                 self._panel_log(model_name, f"[Image Error] {e}")
         self.after(0, do)
 
-    # Loading (sequential; with split timings)
     def _load_all_models(self):
-        # YOLO
+
         try:
             start = time.perf_counter()
             self.yolo = YoloClassifier(YOLO_MODEL_PATH)
@@ -800,7 +754,6 @@ class App(tk.Tk):
             )
             self._log(f"[YOLO] pkg(this) {self.yolo.pkg_time_this_call:.3f}s | pkg(cold total) {self.yolo.pkg_cold_total:.3f}s | model {self.yolo.model_init_time:.3f}s")
 
-            # Populate dropdowns from YOLO class names
             try:
                 names = self.yolo.classes()
                 crops, states = set(), set()
@@ -818,7 +771,6 @@ class App(tk.Tk):
 
         self.after(0, self._refresh_plots)
 
-        # Xception
         try:
             start = time.perf_counter()
             self.xception = XceptionClassifier(XCEPTION_TFLITE, XCEPTION_LABELS_CROP, XCEPTION_LABELS_STATE)
@@ -834,7 +786,6 @@ class App(tk.Tk):
                 f"  Wrapper init (outer):       {secs:.3f}s"
             )
             self._log(f"[Xception] pkg(this) {self.xception.pkg_time_this_call:.3f}s | pkg(cold total) {self.xception.pkg_cold_total:.3f}s | model {self.xception.model_init_time:.3f}s")
-            # populate dropdowns
             self._merge_target_crop_options(self.xception.class_names)
             self._merge_target_state_options(self.xception.state_labels)
         except Exception as e:
@@ -843,7 +794,6 @@ class App(tk.Tk):
 
         self.after(0, self._refresh_plots)
 
-        # ResNet (Keras)
         try:
             start = time.perf_counter()
             self.resnet = ResNetClassifier(RESNET50_KERAS_MODEL, RESNET50_CLASS_CSV, RESNET_CLASSES_JSON)
@@ -859,8 +809,6 @@ class App(tk.Tk):
                 f"  Wrapper init (outer):       {secs:.3f}s"
             )
             self._log(f"[ResNet] pkg(this) {self.resnet.pkg_time_this_call:.3f}s | pkg(cold total) {self.resnet.pkg_cold_total:.3f}s | model {self.resnet.model_init_time:.3f}s")
-
-            # populate dropdowns
             crops, states = set(), set()
             for nm in self.resnet.class_names:
                 c, s = split_combined_label(nm)
@@ -873,8 +821,6 @@ class App(tk.Tk):
             self._log("[ResNet] Load failed. See panel for details.")
 
         self.after(0, self._refresh_plots)
-
-    # Options helpers
     def _merge_target_crop_options(self, more: List[str]):
         def do():
             existing = list(self.target_crop_entry["values"]) if self.target_crop_entry["values"] else []
@@ -888,8 +834,6 @@ class App(tk.Tk):
             merged = sorted(set(existing + [str(o) for o in more if o]))
             self.target_state_entry["values"] = merged
         self.after(0, do)
-
-    # Actions
     def open_image(self):
         path = filedialog.askopenfilename(
             title="Select image",
@@ -946,18 +890,14 @@ class App(tk.Tk):
             except Exception as e:
                 self._panel_log('ResNet', "Prediction error: {}\n{}".format(e, traceback.format_exc()))
 
-    # Metrics logging
     def _update_metrics(self, model_name: str, out: dict):
         infer = float(out.get('infer_secs', 0.0))
-        # For Xception, we track crop-head confidence for "Top-1"
         conf = float(out['crop'].get('top1_conf', 0.0)) if model_name == 'Xception' and isinstance(out.get('crop'), dict) else float(out.get('top1_conf', 0.0))
         self.hist[model_name]['infer'].append(infer)
         self.hist[model_name]['conf'].append(conf)
         self.hist[model_name]['infer'] = self.hist[model_name]['infer'][-50:]
         self.hist[model_name]['conf']  = self.hist[model_name]['conf'][-50:]
         self.after(0, self._refresh_plots)
-
-    # Render results text
     def _render_result(self, model_name: str, out: dict, total_secs: float, target_crop: Optional[str], target_state: Optional[str]):
         if model_name == 'Xception' and isinstance(out.get('crop'), dict) and isinstance(out.get('state'), dict):
             crop_top = out['crop']['top1_name']; crop_p = out['crop']['top1_conf']
@@ -993,8 +933,6 @@ class App(tk.Tk):
             self._panel_log(model_name, "\n".join(lines))
             self._log(f"[Xception] Crop: {crop_top} ({fmt_pct(crop_p)}) | State: {state_top} ({fmt_pct(state_p)}) | Infer: {out.get('infer_secs', 0.0):.3f}s")
             return
-
-        # YOLO / ResNet (combined labels)
         combined = out.get('top1_name', '—')
         crop_pred, state_pred = split_combined_label(combined)
         caption = f"Crop: {crop_pred} ({fmt_pct(out.get('top1_conf', 0.0))}) | State: {state_pred or '—'}"
